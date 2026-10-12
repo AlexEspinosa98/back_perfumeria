@@ -179,7 +179,7 @@ create table public.store_settings (
 );
 insert into public.store_settings (key, value) values
   ('whatsapp_number', ''),
-  ('store_name', 'Bahia Perfumes'),
+  ('store_name', 'Bahía Perfumes'),
   ('announcement', '');
 
 -- ───────────────────────── updated_at automático ─────────────────────────

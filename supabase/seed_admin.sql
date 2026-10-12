@@ -40,5 +40,5 @@ begin
 end $$;
 
 -- Marca de la tienda (si ya habías ejecutado 0001 con el nombre anterior):
-insert into public.store_settings (key, value) values ('store_name', 'Bahia Perfumes'), ('announcement', '')
+insert into public.store_settings (key, value) values ('store_name', 'Bahía Perfumes'), ('announcement', '')
 on conflict (key) do update set value = excluded.value where public.store_settings.key = 'store_name';
