@@ -381,6 +381,12 @@ def send_campaign_chunk(campaign_id: str, request: Request, chunk: int = Query(5
 
 
 # ───────────────────────── Ajustes de tienda ─────────────────────────
+@router.get("/settings")
+def all_settings():
+    """Todos los ajustes (incluye los privados, como el correo de avisos)."""
+    return {r["key"]: r["value"] for r in get_db().table("store_settings").select("*").execute().data}
+
+
 @router.put("/settings/{key}")
 def set_setting(key: str, body: SettingIn):
     if key not in {"whatsapp_number", "store_name", "announcement", "instagram_url", "facebook_url", "admin_notify_email"}:
