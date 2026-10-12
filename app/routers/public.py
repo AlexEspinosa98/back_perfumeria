@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
 from app.core.supabase import get_db
+from app.services.store import get_store
 from app.services.email import sign_unsubscribe
 
 router = APIRouter(tags=["public"])
@@ -93,9 +94,8 @@ def get_perfume(perfume_id: str):
 
 @router.get("/store")
 def store_info():
-    """Datos públicos de la tienda: nombre y WhatsApp para el botón 'Pedir por WhatsApp'."""
-    rows = get_db().table("store_settings").select("*").in_("key", ["whatsapp_number", "store_name", "announcement"]).execute().data
-    return {r["key"]: r["value"] for r in rows}
+    """Datos públicos de la tienda: WhatsApp, redes, banner."""
+    return get_store()
 
 
 @router.get("/unsubscribe", response_class=HTMLResponse)

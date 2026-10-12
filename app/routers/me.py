@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.deps import CurrentUser, get_current_user
 from app.core.supabase import get_db
 from app.schemas import STATUS_LABELS, ConsentUpdate, OrderIn, ProfileUpdate
+from app.services.store import get_store
 from app.services.whatsapp import normalize_phone, wa_link
 
 router = APIRouter(prefix="/me", tags=["cliente"])
@@ -109,7 +110,7 @@ def create_order(body: OrderIn, user: CurrentUser = Depends(get_current_user)):
         db.table("orders").delete().eq("id", order["id"]).execute()
         raise
 
-    store = {r["key"]: r["value"] for r in db.table("store_settings").select("*").execute().data}
+    store = get_store()
     lines = [f"• {q} x {found[i]['name']}" for i, q in qty_by_id.items()]
     total_fmt = f"{total:,.0f}".replace(",", ".")
     text = (f"Hola, soy {order['shipping_name']}. Hice el pedido #{order['order_number']}:\n"

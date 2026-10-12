@@ -12,6 +12,7 @@ from app.schemas import (
     PerfumeIn, PerfumeUpdate, SendIndividualIn, SettingIn, WhatsappTemplateIn,
 )
 from app.services import email as mail
+from app.services.store import get_store
 from app.services.templating import render
 from app.services.whatsapp import wa_link
 from app.core.config import settings
@@ -32,7 +33,7 @@ def now_iso() -> str:
 
 
 def store_values() -> dict:
-    return {r["key"]: r["value"] for r in get_db().table("store_settings").select("*").execute().data}
+    return get_store()
 
 
 # ───────────────────────── Categorías ─────────────────────────
@@ -354,6 +355,6 @@ def send_campaign_chunk(campaign_id: str, request: Request, chunk: int = Query(5
 # ───────────────────────── Ajustes de tienda ─────────────────────────
 @router.put("/settings/{key}")
 def set_setting(key: str, body: SettingIn):
-    if key not in {"whatsapp_number", "store_name", "announcement"}:
+    if key not in {"whatsapp_number", "store_name", "announcement", "instagram_url", "facebook_url"}:
         raise HTTPException(404, "Ajuste desconocido")
     return get_db().table("store_settings").upsert({"key": key, "value": body.value}).execute().data[0]

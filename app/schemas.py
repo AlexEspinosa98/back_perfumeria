@@ -105,3 +105,29 @@ class SendIndividualIn(BaseModel):
 
 class SettingIn(BaseModel):
     value: str
+
+
+class ReviewIn(BaseModel):
+    perfume_id: str
+    rating: int = Field(ge=1, le=5)
+    comment: str = Field(min_length=10, max_length=1000)
+
+
+class ReviewModeration(BaseModel):
+    status: str  # pending | approved | rejected
+
+
+class TestimonialIn(BaseModel):
+    image_url: str = Field(min_length=5)
+    author: str = Field(default="", max_length=80)
+    caption: str = Field(default="", max_length=500)
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class TestimonialUpdate(BaseModel):
+    image_url: str | None = None
+    author: str | None = Field(default=None, max_length=80)
+    caption: str | None = Field(default=None, max_length=500)
+    is_active: bool | None = None
+    sort_order: int | None = None
