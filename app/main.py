@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import admin, me, public
+from app.routers import admin, auth, me, public
 
 app = FastAPI(title="Perfumería API")
 
@@ -15,5 +15,6 @@ app.add_middleware(
 )
 
 app.include_router(public.router)
+app.include_router(auth.router)
 app.include_router(me.router)
 app.include_router(admin.router)
