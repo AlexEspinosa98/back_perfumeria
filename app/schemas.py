@@ -1,3 +1,6 @@
+from datetime import date, datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 ORDER_STATUSES = ["pending", "confirmed", "paid", "preparing", "shipped", "delivered", "cancelled"]
@@ -28,7 +31,8 @@ class PerfumeIn(BaseModel):
     badge: str | None = None
     is_active: bool = True
     is_featured: bool = False
-    in_stock: bool = True
+    stock: int = Field(default=0, ge=0, le=100000)      # "Disponible" se calcula solo: stock > 0
+    cost: int = Field(default=0, ge=0)                  # precio base (lo que te cuesta)
     category_ids: list[str] = []
 
 
@@ -42,7 +46,8 @@ class PerfumeUpdate(BaseModel):
     badge: str | None = None
     is_active: bool | None = None
     is_featured: bool | None = None
-    in_stock: bool | None = None
+    stock: int | None = Field(default=None, ge=0, le=100000)
+    cost: int | None = Field(default=None, ge=0)
     category_ids: list[str] | None = None
 
 
@@ -66,6 +71,7 @@ class OrderItemIn(BaseModel):
 
 class OrderIn(BaseModel):
     items: list[OrderItemIn] = Field(min_length=1)
+    contact_via: Literal["reserve", "whatsapp"] = "whatsapp"   # reservar y esperar contacto / escribir por WhatsApp
     shipping_name: str = ""
     shipping_phone: str = ""
     shipping_address: str = ""
@@ -131,3 +137,44 @@ class TestimonialUpdate(BaseModel):
     caption: str | None = Field(default=None, max_length=500)
     is_active: bool | None = None
     sort_order: int | None = None
+
+
+# ───────────── Contabilidad ─────────────
+class SaleItemIn(BaseModel):
+    perfume_id: str | None = None          # del catálogo (toma nombre y costo) o...
+    name: str | None = Field(default=None, max_length=160)   # ...escrito a mano
+    quantity: int = Field(ge=1, le=1000)
+    unit_price: int = Field(ge=0)           # en cuánto se vendió cada unidad
+    unit_cost: int | None = Field(default=None, ge=0)   # opcional: si no se envía, usa el costo del catálogo
+
+
+class SaleIn(BaseModel):
+    sold_at: datetime | None = None
+    channel: Literal["web", "whatsapp", "presencial", "otro"] = "whatsapp"
+    customer_name: str = Field(default="", max_length=120)
+    note: str = Field(default="", max_length=500)
+    items: list[SaleItemIn] = Field(min_length=1)
+    decrement_stock: bool = True
+
+
+class SaleUpdate(BaseModel):
+    sold_at: datetime | None = None
+    channel: Literal["web", "whatsapp", "presencial", "otro"] | None = None
+    customer_name: str | None = Field(default=None, max_length=120)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class ExpenseIn(BaseModel):
+    spent_at: date | None = None
+    amount: int = Field(gt=0)
+    reason: str = Field(min_length=2, max_length=200)
+    category: str = Field(default="otros", max_length=40)
+    note: str = Field(default="", max_length=500)
+
+
+class ExpenseUpdate(BaseModel):
+    spent_at: date | None = None
+    amount: int | None = Field(default=None, gt=0)
+    reason: str | None = Field(default=None, min_length=2, max_length=200)
+    category: str | None = Field(default=None, max_length=40)
+    note: str | None = Field(default=None, max_length=500)

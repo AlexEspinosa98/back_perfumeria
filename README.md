@@ -26,6 +26,7 @@ Supabase aporta Auth, Postgres (con RLS) y Storage. El front **no habla con Supa
 
 | Área | Rutas |
 |---|---|
+| Contabilidad (admin) | `GET /admin/accounting/summary?from=&to=`, `/admin/sales` (varios productos por venta), `/admin/expenses` |
 | Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password` |
 | Público | `GET /perfumes?q=&category=&featured=`, `GET /perfumes/{id}`, `GET /categories`, `GET /store`, `GET /unsubscribe` |
 | Cliente (Bearer) | `GET/PATCH /me`, `POST /me/consents`, `GET /me/orders`, `GET /me/orders/{id}` (con línea de tiempo), `POST /me/orders` (devuelve `whatsapp_url` para coordinar con la tienda) |
@@ -40,3 +41,10 @@ Campañas masivas: `POST /admin/campaigns` fija los destinatarios (solo `marketi
 
 ## Habeas data (Ley 1581)
 El consentimiento de datos se guarda con fecha y versión (`profiles`, `consent_log`); sin él no se puede hacer pedidos. Promociones es un consentimiento aparte y revocable (`POST /me/consents` o enlace de baja).
+
+## Stock y contabilidad (migración 0003)
+- Cada perfume tiene `stock` (cantidad) y `cost` (precio base, privado: el público nunca lo ve). «Disponible» se calcula solo (`stock > 0`).
+- El pedido web descuenta stock de forma atómica (no se puede vender de más). Cancelar devuelve las unidades; reabrir las aparta de nuevo.
+- Un pedido pasa a **venta contable** al marcarlo *Pagado* o *Entregado* (una sola vez); si se cancela, la venta se anula.
+- Ventas manuales (`POST /admin/sales`): varias líneas, del catálogo o escritas a mano, con precio y costo por unidad.
+- `GET /admin/accounting/summary`: ingresos, costo de ventas, utilidad bruta, gastos y **balance** (utilidad neta), top productos, canales, gastos por categoría e inventario valorizado.

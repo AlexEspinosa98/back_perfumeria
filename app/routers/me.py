@@ -1,3 +1,4 @@
+import html
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.deps import CurrentUser, get_current_user
 from app.core.supabase import get_db
 from app.schemas import STATUS_LABELS, ConsentUpdate, OrderIn, ProfileUpdate
+from app.services import email as mail
 from app.services.store import get_store
 from app.services.whatsapp import normalize_phone, wa_link
 
@@ -69,9 +71,20 @@ def my_order(order_id: str, user: CurrentUser = Depends(get_current_user)):
     return order
 
 
+def _stock_error(exc: Exception) -> HTTPException | None:
+    """Traduce el error 'insufficient_stock:<nombre>' de la BD a una respuesta clara."""
+    msg = str(getattr(exc, "message", None) or exc)
+    if "insufficient_stock:" in msg:
+        name = msg.split("insufficient_stock:", 1)[1].split('"')[0].strip(" '}")
+        return HTTPException(409, f"No hay suficiente stock de «{name}». Reduce la cantidad o quítalo de la bolsa.")
+    return None
+
+
 @router.post("/orders", status_code=201)
 def create_order(body: OrderIn, user: CurrentUser = Depends(get_current_user)):
-    """Crea el pedido (precios tomados del servidor) y devuelve el enlace de WhatsApp para coordinar con la tienda."""
+    """Crea el pedido de forma atómica (valida y descuenta stock, precios del servidor).
+    `contact_via`: 'reserve' = reservar y esperar contacto; 'whatsapp' = además escribir ya por WhatsApp.
+    En ambos casos se devuelve `whatsapp_url` por si el cliente quiere escribir."""
     if not user.profile.get("data_consent_at"):
         raise HTTPException(403, "Debes autorizar el tratamiento de datos para hacer pedidos")
     db = get_db()
@@ -79,41 +92,48 @@ def create_order(body: OrderIn, user: CurrentUser = Depends(get_current_user)):
     qty_by_id: dict[str, int] = {}
     for it in body.items:
         qty_by_id[it.perfume_id] = qty_by_id.get(it.perfume_id, 0) + it.quantity
-    perfumes = (db.table("perfumes").select("id, name, price, in_stock")
-                .in_("id", list(qty_by_id)).eq("is_active", True).execute().data)
-    found = {p["id"]: p for p in perfumes}
-    missing = [i for i in qty_by_id if i not in found or not found[i]["in_stock"]]
-    if missing:
-        raise HTTPException(409, f"Productos no disponibles: {missing}")
-
-    total = sum(int(found[i]["price"]) * q for i, q in qty_by_id.items())
     p = user.profile
-    order = db.table("orders").insert({
-        "user_id": user.id,
-        "total": total,
-        "shipping_name": body.shipping_name or p["full_name"],
-        "shipping_phone": normalize_phone(body.shipping_phone or p["phone"]),
-        "shipping_address": body.shipping_address or p["address"],
-        "shipping_city": body.shipping_city or p["city"],
-        "notes": body.notes,
-    }).execute().data[0]
     try:
-        db.table("order_items").insert([
-            {"order_id": order["id"], "perfume_id": i, "name": found[i]["name"],
-             "unit_price": found[i]["price"], "quantity": q}
-            for i, q in qty_by_id.items()
-        ]).execute()
-        db.table("order_events").insert(
-            {"order_id": order["id"], "status": "pending", "note": "Pedido recibido", "created_by": user.id}
-        ).execute()
-    except Exception:
-        db.table("orders").delete().eq("id", order["id"]).execute()
-        raise
+        order = db.rpc("place_order", {
+            "p_user": user.id,
+            "p_items": [{"perfume_id": i, "quantity": q} for i, q in qty_by_id.items()],
+            "p_contact_via": body.contact_via,
+            "p_name": body.shipping_name or p["full_name"],
+            "p_phone": normalize_phone(body.shipping_phone or p["phone"]),
+            "p_address": body.shipping_address or p["address"],
+            "p_city": body.shipping_city or p["city"],
+            "p_notes": body.notes,
+        }).execute().data
+    except Exception as exc:  # postgrest APIError
+        err = _stock_error(exc)
+        if err:
+            raise err
+        raise HTTPException(400, "No se pudo crear el pedido. Revisa los productos de tu bolsa.")
 
+    items = db.table("order_items").select("name, quantity").eq("order_id", order["id"]).execute().data
     store = get_store()
-    lines = [f"• {q} x {found[i]['name']}" for i, q in qty_by_id.items()]
-    total_fmt = f"{total:,.0f}".replace(",", ".")
-    text = (f"Hola, soy {order['shipping_name']}. Hice el pedido #{order['order_number']}:\n"
+    total_fmt = f"{int(order['total']):,}".replace(",", ".")
+    lines = [f"• {i['quantity']} x {i['name']}" for i in items]
+    action = "Quiero reservar" if body.contact_via == "reserve" else "Hice"
+    text = (f"Hola, soy {order['shipping_name']}. {action} el pedido #{order['order_number']}:\n"
             + "\n".join(lines) + f"\nTotal: ${total_fmt} COP\n¿Me confirman el pago y el envío?")
     whatsapp_url = wa_link(store["whatsapp_number"], text) if store.get("whatsapp_number") else None
+
+    _notify_admin_new_order(order, items, total_fmt)
     return {"order": order, "whatsapp_url": whatsapp_url}
+
+
+def _notify_admin_new_order(order: dict, items: list[dict], total_fmt: str) -> None:
+    """Correo opcional al admin (setting admin_notify_email). Nunca rompe la creación del pedido."""
+    try:
+        rows = get_db().table("store_settings").select("value").eq("key", "admin_notify_email").execute().data
+        to = rows[0]["value"].strip() if rows else ""
+        if not to:
+            return
+        lista = "".join(f"<li>{html.escape(i['name'])} × {i['quantity']}</li>" for i in items)
+        via = "quiere que lo contacten" if order.get("contact_via") == "reserve" else "escribió por WhatsApp"
+        mail.send_one(to, f"Nuevo pedido #{order['order_number']}",
+                      f"<p>Pedido <b>#{order['order_number']}</b> de {html.escape(order['shipping_name'])} ({via}).</p>"
+                      f"<ul>{lista}</ul><p>Total: ${total_fmt} COP</p>")
+    except Exception:
+        pass

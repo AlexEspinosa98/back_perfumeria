@@ -11,7 +11,9 @@ from app.services.email import sign_unsubscribe
 router = APIRouter(tags=["public"])
 
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
-PERFUME_SELECT = "*, categories(id, name, slug)"
+# Columnas públicas: nunca incluir cost (precio base) ni datos internos.
+PERFUME_SELECT = ("id, name, brand, description, presentation, price, image_url, badge, is_active, "
+                  "is_featured, in_stock, created_at, categories(id, name, slug)")
 
 
 @router.get("/health")

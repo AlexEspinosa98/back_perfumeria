@@ -129,6 +129,12 @@ def admin_orders(status: str | None = None, limit: int = Query(50, ge=1, le=200)
     return {"items": res.data, "total": res.count}
 
 
+@router.get("/orders/pending-count")
+def pending_count():
+    """Pedidos sin atender (estado pendiente): para el contador del panel."""
+    return {"pending": get_db().table("orders").select("id", count="exact").eq("status", "pending").execute().count}
+
+
 @router.get("/orders/{order_id}")
 def admin_order(order_id: str):
     db = get_db()
@@ -147,18 +153,40 @@ def update_order_status(order_id: str, body: OrderStatusUpdate, admin: CurrentUs
     if body.status not in ORDER_STATUSES:
         raise HTTPException(422, f"Estado inválido. Opciones: {ORDER_STATUSES}")
     db = get_db()
+    current = db.table("orders").select("id, status").eq("id", order_id).limit(1).execute().data
+    if not current:
+        raise HTTPException(404, "Pedido no encontrado")
+    old_status = current[0]["status"]
+
+    # Stock: cancelar devuelve las unidades; reabrir un pedido cancelado las vuelve a apartar.
+    try:
+        if body.status == "cancelled" and old_status != "cancelled":
+            db.rpc("set_order_stock", {"p_order": order_id, "p_reserve": False}).execute()
+        elif old_status == "cancelled" and body.status != "cancelled":
+            db.rpc("set_order_stock", {"p_order": order_id, "p_reserve": True}).execute()
+    except Exception as exc:
+        msg = str(getattr(exc, "message", None) or exc)
+        if "insufficient_stock:" in msg:
+            raise HTTPException(409, "No hay stock suficiente para reabrir este pedido")
+        raise HTTPException(400, "No se pudo ajustar el stock del pedido")
+
     patch = {"status": body.status}
     if body.tracking_code is not None:
         patch["tracking_code"] = body.tracking_code
     if body.carrier is not None:
         patch["carrier"] = body.carrier
     rows = db.table("orders").update(patch).eq("id", order_id).execute().data
-    if not rows:
-        raise HTTPException(404, "Pedido no encontrado")
     order = rows[0]
     db.table("order_events").insert(
         {"order_id": order_id, "status": body.status, "note": body.note, "created_by": admin.id}
     ).execute()
+
+    # Contabilidad: pagado o entregado = venta registrada (una sola vez); cancelado = se anula la venta.
+    sale_registered = False
+    if body.status in ("paid", "delivered"):
+        sale_registered = bool(db.rpc("sale_from_order", {"p_order": order_id, "p_by": admin.id}).execute().data)
+    elif body.status == "cancelled":
+        db.table("sales").delete().eq("order_id", order_id).execute()
 
     email_result = None
     if body.notify_email:
@@ -170,7 +198,7 @@ def update_order_status(order_id: str, body: OrderStatusUpdate, admin: CurrentUs
             ok, err = mail.send_one(cust["email"], render(tpl[0]["subject"], vals),
                                     render(tpl[0]["html"], vals, escape=True))
             email_result = {"sent": ok, "error": err}
-    return {"order": order, "email": email_result}
+    return {"order": order, "email": email_result, "sale_registered": sale_registered}
 
 
 @router.get("/orders/{order_id}/whatsapp")
@@ -355,6 +383,6 @@ def send_campaign_chunk(campaign_id: str, request: Request, chunk: int = Query(5
 # ───────────────────────── Ajustes de tienda ─────────────────────────
 @router.put("/settings/{key}")
 def set_setting(key: str, body: SettingIn):
-    if key not in {"whatsapp_number", "store_name", "announcement", "instagram_url", "facebook_url"}:
+    if key not in {"whatsapp_number", "store_name", "announcement", "instagram_url", "facebook_url", "admin_notify_email"}:
         raise HTTPException(404, "Ajuste desconocido")
     return get_db().table("store_settings").upsert({"key": key, "value": body.value}).execute().data[0]
