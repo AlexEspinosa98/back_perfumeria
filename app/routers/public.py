@@ -16,6 +16,31 @@ def health():
     return {"status": "ok"}
 
 
+@router.get("/health/db")
+def health_db():
+    """Diagnóstico de la conexión a Supabase. Solo devuelve un código, nunca llaves ni URLs."""
+    import httpx
+    from app.core.config import settings
+
+    url, key = settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY
+    if not url or not key:
+        return {"db": "error", "reason": "missing_env"}
+    if not url.startswith("https://"):
+        return {"db": "error", "reason": "url_must_start_with_https"}
+    try:
+        r = httpx.get(f"{url.rstrip('/')}/rest/v1/categories?select=id&limit=1",
+                      headers={"apikey": key, "Authorization": f"Bearer {key}"}, timeout=10)
+    except httpx.HTTPError:
+        return {"db": "error", "reason": "unreachable_check_supabase_url"}
+    if r.is_success:
+        return {"db": "ok"}
+    if r.status_code in (401, 403):
+        return {"db": "error", "reason": "invalid_service_role_key"}
+    if r.status_code == 404 or "does not exist" in r.text or "schema cache" in r.text:
+        return {"db": "error", "reason": "tables_missing_run_migration_sql"}
+    return {"db": "error", "reason": f"supabase_status_{r.status_code}"}
+
+
 @router.get("/categories")
 def list_categories():
     return get_db().table("categories").select("*").order("sort_order").execute().data
