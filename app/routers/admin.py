@@ -354,6 +354,6 @@ def send_campaign_chunk(campaign_id: str, request: Request, chunk: int = Query(5
 # ───────────────────────── Ajustes de tienda ─────────────────────────
 @router.put("/settings/{key}")
 def set_setting(key: str, body: SettingIn):
-    if key not in {"whatsapp_number", "store_name"}:
+    if key not in {"whatsapp_number", "store_name", "announcement"}:
         raise HTTPException(404, "Ajuste desconocido")
     return get_db().table("store_settings").upsert({"key": key, "value": body.value}).execute().data[0]

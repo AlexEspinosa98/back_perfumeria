@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
@@ -8,6 +9,7 @@ from app.services.email import sign_unsubscribe
 
 router = APIRouter(tags=["public"])
 
+UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 PERFUME_SELECT = "*, categories(id, name, slug)"
 
 
@@ -51,6 +53,7 @@ def list_perfumes(
     q: str | None = None,
     category: str | None = Query(None, description="slug de categoría"),
     featured: bool | None = None,
+    ids: str | None = Query(None, description="UUIDs separados por coma (lista de deseos)"),
     limit: int = Query(24, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
@@ -68,6 +71,11 @@ def list_perfumes(
     if q:
         term = q.replace(",", " ").replace("%", " ").strip()
         query = query.or_(f"name.ilike.%{term}%,brand.ilike.%{term}%,description.ilike.%{term}%")
+    if ids:
+        valid = [i for i in ids.split(",") if UUID_RE.fullmatch(i.strip())][:100]
+        if not valid:
+            return {"items": [], "total": 0}
+        query = query.in_("id", valid)
     if featured is not None:
         query = query.eq("is_featured", featured)
     res = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
@@ -86,7 +94,7 @@ def get_perfume(perfume_id: str):
 @router.get("/store")
 def store_info():
     """Datos públicos de la tienda: nombre y WhatsApp para el botón 'Pedir por WhatsApp'."""
-    rows = get_db().table("store_settings").select("*").in_("key", ["whatsapp_number", "store_name"]).execute().data
+    rows = get_db().table("store_settings").select("*").in_("key", ["whatsapp_number", "store_name", "announcement"]).execute().data
     return {r["key"]: r["value"] for r in rows}
 
 

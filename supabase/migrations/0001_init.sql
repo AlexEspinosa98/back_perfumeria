@@ -179,7 +179,8 @@ create table public.store_settings (
 );
 insert into public.store_settings (key, value) values
   ('whatsapp_number', ''),
-  ('store_name', 'Perfumería');
+  ('store_name', 'Bahia Perfumes'),
+  ('announcement', '');
 
 -- ───────────────────────── updated_at automático ─────────────────────────
 create or replace function public.touch_updated_at() returns trigger language plpgsql as $$
@@ -239,7 +240,7 @@ create policy email_tpl_admin on public.email_templates for all using (public.is
 create policy wa_tpl_admin on public.whatsapp_templates for all using (public.is_admin()) with check (public.is_admin());
 create policy campaigns_admin on public.campaigns for all using (public.is_admin()) with check (public.is_admin());
 create policy campaign_rcpt_admin on public.campaign_recipients for all using (public.is_admin()) with check (public.is_admin());
-create policy settings_read on public.store_settings for select using (key in ('whatsapp_number', 'store_name'));
+create policy settings_read on public.store_settings for select using (key in ('whatsapp_number', 'store_name', 'announcement'));
 create policy settings_admin on public.store_settings for all using (public.is_admin()) with check (public.is_admin());
 
 -- ───────────────────────── Storage: imágenes de perfumes ─────────────────────────
