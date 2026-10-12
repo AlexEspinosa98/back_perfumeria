@@ -1,13 +1,13 @@
 # Perfumería — Backend (FastAPI + Supabase)
 
 API para la tienda: catálogo público, clientes (registro, perfil, consentimientos, pedidos y seguimiento) y panel admin (catálogo, pedidos, correos, plantillas de WhatsApp).
-Supabase aporta Auth, Postgres (con RLS) y Storage. El front se conecta a Supabase Auth directo y manda el `access_token` a esta API.
+Supabase aporta Auth, Postgres (con RLS) y Storage. El front **no habla con Supabase**: todo (incluido el login) pasa por esta API, que usa Supabase por detrás.
 
 ## Puesta en marcha
 
 1. **Supabase**: crear proyecto → SQL Editor → ejecutar `supabase/migrations/0001_init.sql`.
-2. Auth → Providers → Email activado. En el front, el registro debe enviar en `options.data`:
-   `{ full_name, phone, data_consent: true, data_consent_version: "v1", marketing_consent }` — un trigger crea el perfil.
+2. Auth → Providers → Email activado. `POST /auth/register` envía los datos y consentimientos a Supabase y un trigger crea el perfil.
+   Auth → URL Configuration: *Site URL* = URL del front y agrega `https://TU-FRONT/**` en Redirect URLs (los correos de confirmar/recuperar redirigen allí).
 3. Registrarte en el sitio y volverte admin:
    ```sql
    update public.profiles set role = 'admin' where email = 'tu-correo@ejemplo.com';
@@ -26,6 +26,7 @@ Supabase aporta Auth, Postgres (con RLS) y Storage. El front se conecta a Supaba
 
 | Área | Rutas |
 |---|---|
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password` |
 | Público | `GET /perfumes?q=&category=&featured=`, `GET /perfumes/{id}`, `GET /categories`, `GET /store`, `GET /unsubscribe` |
 | Cliente (Bearer) | `GET/PATCH /me`, `POST /me/consents`, `GET /me/orders`, `GET /me/orders/{id}` (con línea de tiempo), `POST /me/orders` (devuelve `whatsapp_url` para coordinar con la tienda) |
 | Admin (Bearer, rol admin) | `/admin/perfumes`, `/admin/categories`, `/admin/uploads/perfume-image`, `/admin/orders` + `PATCH …/status`, `/admin/customers`, `/admin/templates/{email,whatsapp}`, `/admin/emails/send`, `/admin/campaigns` + `POST …/send` |
