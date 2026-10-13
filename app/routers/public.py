@@ -12,8 +12,21 @@ router = APIRouter(tags=["public"])
 
 UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 # Columnas públicas: nunca incluir cost (precio base) ni datos internos.
-PERFUME_SELECT = ("id, name, brand, description, presentation, price, image_url, badge, is_active, "
-                  "is_featured, in_stock, created_at, categories(id, name, slug)")
+_BASE_COLS = ("id, name, brand, description, presentation, price, image_url, badge, is_active, "
+              "is_featured, in_stock, created_at")
+_has_images = False
+
+
+def perfume_select() -> str:
+    """Columnas públicas. Incluye `images` (hasta 3 fotos) cuando la migración 0004 ya está aplicada."""
+    global _has_images
+    if not _has_images:
+        try:
+            get_db().table("perfumes").select("images").limit(1).execute()
+            _has_images = True
+        except Exception:
+            pass
+    return f"{_BASE_COLS}{', images' if _has_images else ''}, categories(id, name, slug)"
 
 
 @router.get("/health")
@@ -61,16 +74,16 @@ def list_perfumes(
     offset: int = Query(0, ge=0),
 ):
     db = get_db()
-    query = db.table("perfumes").select(PERFUME_SELECT, count="exact").eq("is_active", True)
+    query = db.table("perfumes").select(perfume_select(), count="exact").eq("is_active", True)
     if category:
         cat = db.table("categories").select("id").eq("slug", category).limit(1).execute().data
         if not cat:
             return {"items": [], "total": 0}
-        ids = [r["perfume_id"] for r in
-               db.table("perfume_categories").select("perfume_id").eq("category_id", cat[0]["id"]).execute().data]
-        if not ids:
+        cat_ids = [r["perfume_id"] for r in
+                   db.table("perfume_categories").select("perfume_id").eq("category_id", cat[0]["id"]).execute().data]
+        if not cat_ids:
             return {"items": [], "total": 0}
-        query = query.in_("id", ids)
+        query = query.in_("id", cat_ids)
     if q:
         term = q.replace(",", " ").replace("%", " ").strip()
         query = query.or_(f"name.ilike.%{term}%,brand.ilike.%{term}%,description.ilike.%{term}%")
@@ -87,7 +100,7 @@ def list_perfumes(
 
 @router.get("/perfumes/{perfume_id}")
 def get_perfume(perfume_id: str):
-    rows = (get_db().table("perfumes").select(PERFUME_SELECT)
+    rows = (get_db().table("perfumes").select(perfume_select())
             .eq("id", perfume_id).eq("is_active", True).limit(1).execute().data)
     if not rows:
         raise HTTPException(404, "Perfume no encontrado")

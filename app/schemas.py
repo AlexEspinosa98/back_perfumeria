@@ -29,6 +29,7 @@ class PerfumeIn(BaseModel):
     price: int = Field(ge=0)
     image_url: str | None = None
     badge: str | None = None
+    images: list[str] = Field(default_factory=list, max_length=3)   # hasta 3 fotos; la primera es la principal
     is_active: bool = True
     is_featured: bool = False
     stock: int = Field(default=0, ge=0, le=100000)      # "Disponible" se calcula solo: stock > 0
@@ -44,6 +45,7 @@ class PerfumeUpdate(BaseModel):
     price: int | None = Field(default=None, ge=0)
     image_url: str | None = None
     badge: str | None = None
+    images: list[str] | None = Field(default=None, max_length=3)
     is_active: bool | None = None
     is_featured: bool | None = None
     stock: int | None = Field(default=None, ge=0, le=100000)

@@ -255,7 +255,7 @@ create policy "perfumes_images_admin" on storage.objects for all
 -- ───────────────────────── Semillas ─────────────────────────
 insert into public.categories (name, slug, sort_order) values
   ('Hombres', 'hombres', 1), ('Mujeres', 'mujeres', 2), ('Unisex', 'unisex', 3),
-  ('Attar & Oud', 'attar-oud', 4), ('Promociones', 'promociones', 5), ('Nuevos', 'nuevos', 6);
+  ('Promociones', 'promociones', 5), ('Nuevos', 'nuevos', 6);
 
 insert into public.whatsapp_templates (name, body) values
   ('Confirmación de pedido', 'Hola {{name}} 👋, soy de {{store}}. Recibí tu pedido #{{order_number}} por {{total}}. ¿Confirmamos dirección de envío y forma de pago?'),

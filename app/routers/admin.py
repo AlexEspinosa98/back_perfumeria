@@ -56,6 +56,19 @@ def delete_category(category_id: str):
     get_db().table("categories").delete().eq("id", category_id).execute()
 
 
+def _clean_images(images: list[str], fallback_url: str | None) -> tuple[list[str], str | None]:
+    """Normaliza la lista de fotos (máx. 3, solo http/https, sin repetidas). Devuelve (images, image_url principal)."""
+    clean: list[str] = []
+    for u in images or []:
+        u = (u or "").strip()
+        if u and u.lower().startswith(("http://", "https://")) and len(u) <= 600 and u not in clean:
+            clean.append(u)
+    clean = clean[:3]
+    if not clean and fallback_url:
+        clean = [fallback_url]
+    return clean, (clean[0] if clean else None)
+
+
 # ───────────────────────── Catálogo ─────────────────────────
 def _set_categories(perfume_id: str, category_ids: list[str]) -> None:
     db = get_db()
@@ -80,6 +93,7 @@ def admin_list_perfumes(q: str | None = None, limit: int = Query(50, ge=1, le=20
 @router.post("/perfumes", status_code=201)
 def create_perfume(body: PerfumeIn):
     data = body.model_dump(exclude={"category_ids"})
+    data["images"], data["image_url"] = _clean_images(body.images, body.image_url)
     perfume = get_db().table("perfumes").insert(data).execute().data[0]
     _set_categories(perfume["id"], body.category_ids)
     return perfume
@@ -88,6 +102,8 @@ def create_perfume(body: PerfumeIn):
 @router.patch("/perfumes/{perfume_id}")
 def update_perfume(perfume_id: str, body: PerfumeUpdate):
     data = body.model_dump(exclude_unset=True, exclude={"category_ids"})
+    if "images" in data and data["images"] is not None:
+        data["images"], data["image_url"] = _clean_images(data["images"], None)   # la 1.ª foto es la principal
     perfume = None
     if data:
         rows = get_db().table("perfumes").update(data).eq("id", perfume_id).execute().data
