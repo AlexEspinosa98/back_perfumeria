@@ -14,19 +14,22 @@ UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 # Columnas públicas: nunca incluir cost (precio base) ni datos internos.
 _BASE_COLS = ("id, name, brand, description, presentation, price, image_url, badge, is_active, "
               "is_featured, in_stock, created_at")
-_has_images = False
+_OPTIONAL_COLS = ("images", "stock")   # existen solo si ya se aplicaron las migraciones 0004 / 0003
+_available: set[str] = set()
 
 
 def perfume_select() -> str:
-    """Columnas públicas. Incluye `images` (hasta 3 fotos) cuando la migración 0004 ya está aplicada."""
-    global _has_images
-    if not _has_images:
-        try:
-            get_db().table("perfumes").select("images").limit(1).execute()
-            _has_images = True
-        except Exception:
-            pass
-    return f"{_BASE_COLS}{', images' if _has_images else ''}, categories(id, name, slug)"
+    """Columnas públicas (nunca `cost`). Suma `images` y `stock` cuando la migración correspondiente ya corrió,
+    para que el catálogo no se caiga si el SQL se aplica después del despliegue."""
+    for col in _OPTIONAL_COLS:
+        if col not in _available:
+            try:
+                get_db().table("perfumes").select(col).limit(1).execute()
+                _available.add(col)
+            except Exception:
+                pass
+    extra = "".join(f", {c}" for c in _OPTIONAL_COLS if c in _available)
+    return f"{_BASE_COLS}{extra}, categories(id, name, slug)"
 
 
 @router.get("/health")

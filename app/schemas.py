@@ -180,3 +180,25 @@ class ExpenseUpdate(BaseModel):
     reason: str | None = Field(default=None, min_length=2, max_length=200)
     category: str | None = Field(default=None, max_length=40)
     note: str | None = Field(default=None, max_length=500)
+
+
+class BannerIn(BaseModel):
+    image_url: str = Field(min_length=5, max_length=600)
+    mobile_image_url: str | None = Field(default=None, max_length=600)
+    title: str = Field(default="", max_length=120)
+    subtitle: str = Field(default="", max_length=300)
+    button_label: str = Field(default="", max_length=40)
+    link_url: str = Field(default="", max_length=500)    # "/colecciones?category=hombres" o "https://..."
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class BannerUpdate(BaseModel):
+    image_url: str | None = Field(default=None, min_length=5, max_length=600)
+    mobile_image_url: str | None = Field(default=None, max_length=600)
+    title: str | None = Field(default=None, max_length=120)
+    subtitle: str | None = Field(default=None, max_length=300)
+    button_label: str | None = Field(default=None, max_length=40)
+    link_url: str | None = Field(default=None, max_length=500)
+    is_active: bool | None = None
+    sort_order: int | None = None
