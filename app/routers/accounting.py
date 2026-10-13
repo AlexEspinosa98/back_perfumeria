@@ -97,15 +97,31 @@ def create_sale(body: SaleIn, admin: CurrentUser = Depends(require_admin)):
 
 @router.patch("/sales/{sale_id}")
 def update_sale(sale_id: str, body: SaleUpdate):
+    """Edita una venta ya registrada: fecha, canal, cliente, nota y/o sus líneas (cantidad, precio, costo, productos).
+    Si la venta descontó stock, el stock se ajusta solo; si viene de un pedido web, el stock no se toca."""
     data = body.model_dump(exclude_unset=True)
-    if "sold_at" in data and data["sold_at"] is not None:
-        data["sold_at"] = data["sold_at"].isoformat()
     if not data:
         raise HTTPException(422, "Nada que actualizar")
-    rows = get_db().table("sales").update(data).eq("id", sale_id).execute().data
-    if not rows:
+    if body.items is not None:
+        for it in body.items:
+            if not it.perfume_id and not (it.name and it.name.strip()):
+                raise HTTPException(422, "Cada producto necesita un perfume del catálogo o un nombre")
+    db = get_db()
+    try:
+        db.rpc("update_sale", {
+            "p_sale": sale_id,
+            "p_sold_at": body.sold_at.isoformat() if body.sold_at else None,
+            "p_channel": body.channel,
+            "p_customer": body.customer_name.strip() if body.customer_name is not None else None,
+            "p_note": body.note.strip() if body.note is not None else None,
+            "p_items": [i.model_dump(exclude_none=True) for i in body.items] if body.items is not None else None,
+        }).execute()
+    except Exception as exc:
+        raise _db_error(exc)
+    row = db.table("sales").select("*, sale_items(*)").eq("id", sale_id).limit(1).execute().data
+    if not row:
         raise HTTPException(404, "Venta no encontrada")
-    return rows[0]
+    return _with_totals(row[0])
 
 
 @router.delete("/sales/{sale_id}", status_code=204)

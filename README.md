@@ -48,3 +48,7 @@ El consentimiento de datos se guarda con fecha y versión (`profiles`, `consent_
 - Un pedido pasa a **venta contable** al marcarlo *Pagado* o *Entregado* (una sola vez); si se cancela, la venta se anula.
 - Ventas manuales (`POST /admin/sales`): varias líneas, del catálogo o escritas a mano, con precio y costo por unidad.
 - `GET /admin/accounting/summary`: ingresos, costo de ventas, utilidad bruta, gastos y **balance** (utilidad neta), top productos, canales, gastos por categoría e inventario valorizado.
+
+## Editar ventas y reponer stock (migración 0006)
+- `PATCH /admin/sales/{id}`: cambia fecha, canal, cliente, nota y/o las líneas de una venta. Si la venta descontó stock se ajusta solo (todo o nada); si viene de un pedido web, el stock no se toca.
+- `POST /admin/stock/adjust`: repone o corrige stock de varios perfumes a la vez (`delta` o `set_to`), sin abrir la ficha. Todo o nada: ningún stock puede quedar negativo.

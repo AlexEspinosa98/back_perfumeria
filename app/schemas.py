@@ -164,6 +164,7 @@ class SaleUpdate(BaseModel):
     channel: Literal["web", "whatsapp", "presencial", "otro"] | None = None
     customer_name: str | None = Field(default=None, max_length=120)
     note: str | None = Field(default=None, max_length=500)
+    items: list[SaleItemIn] | None = Field(default=None, min_length=1)   # si se envía, reemplaza las líneas de la venta
 
 
 class ExpenseIn(BaseModel):
@@ -202,3 +203,13 @@ class BannerUpdate(BaseModel):
     link_url: str | None = Field(default=None, max_length=500)
     is_active: bool | None = None
     sort_order: int | None = None
+
+
+class StockItem(BaseModel):
+    perfume_id: str
+    delta: int | None = Field(default=None, ge=-100000, le=100000)   # sumar (+) o restar (−) unidades
+    set_to: int | None = Field(default=None, ge=0, le=100000)        # o fijar el stock exacto
+
+
+class StockAdjustIn(BaseModel):
+    items: list[StockItem] = Field(min_length=1, max_length=200)

@@ -9,7 +9,7 @@ from app.core.deps import CurrentUser, require_admin
 from app.core.supabase import get_db
 from app.schemas import (
     ORDER_STATUSES, STATUS_LABELS, CampaignIn, CategoryIn, EmailTemplateIn, OrderStatusUpdate,
-    PerfumeIn, PerfumeUpdate, SendIndividualIn, SettingIn, WhatsappTemplateIn,
+    PerfumeIn, PerfumeUpdate, SendIndividualIn, StockAdjustIn, SettingIn, WhatsappTemplateIn,
 )
 from app.services import email as mail
 from app.services.store import get_store
@@ -118,6 +118,24 @@ def update_perfume(perfume_id: str, body: PerfumeUpdate):
 @router.delete("/perfumes/{perfume_id}", status_code=204)
 def delete_perfume(perfume_id: str):
     get_db().table("perfumes").delete().eq("id", perfume_id).execute()
+
+
+@router.post("/stock/adjust")
+def adjust_stock(body: StockAdjustIn):
+    """Repone o corrige stock de uno o varios perfumes sin abrir su ficha. Todo o nada.
+    Cada ítem: {perfume_id, delta} (suma o resta) o {perfume_id, set_to} (stock exacto)."""
+    for it in body.items:
+        if (it.delta is None) == (it.set_to is None):
+            raise HTTPException(422, "Cada ítem necesita 'delta' o 'set_to' (solo uno)")
+    try:
+        res = get_db().rpc("adjust_stock_bulk", {"p_items": [i.model_dump(exclude_none=True) for i in body.items]}).execute().data
+    except Exception as exc:
+        msg = str(getattr(exc, "message", None) or exc)
+        if "invalid_stock:" in msg:
+            name = msg.split("invalid_stock:", 1)[1].split('"')[0].strip(" '}")
+            raise HTTPException(409, f"El stock de «{name}» no puede quedar en negativo")
+        raise HTTPException(400, "No se pudo actualizar el stock")
+    return {"updated": res}
 
 
 @router.post("/uploads/perfume-image")
